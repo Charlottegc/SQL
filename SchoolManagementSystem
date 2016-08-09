@@ -1,0 +1,157 @@
+--Display Course details of Mathematics depart
+select c.* from Course as c
+join Department as d
+on d.DepartmentID = c.DepartmentID
+where d.Name = 'Mathematics'
+--Display Course details running by Instructor Harui Roger
+select p.FirstName,p.LastName,c.* from Person as p
+join CourseInstructor as ci
+on p.PersonID = ci.PersonID
+join Course as c
+on ci.CourseID = c.CourseID
+where p.FirstName = 'Roger' and p.LastName = 'Harui'
+--Display Full details of Student name / Course name / Instructor name/ Grade 
+select p.FirstName,p.LastName,c.Title,sg.Grade,pp.FirstName,pp.LastName 
+from Person as p
+join StudentGrade as sg
+on p.PersonID = sg.StudentID
+join course as c
+on sg.CourseID = c.CourseID 
+join CourseInstructor as ci
+on c.CourseID = ci.CourseID
+join Person as pp
+on pp.PersonID = ci.PersonID
+--Transform above query to SQL functions
+----Display Course details of Mathematics depart
+ALTER FUNCTION fCourseMathematics()
+RETURNS TABLE
+AS
+RETURN
+(select c.* from Course as c
+join Department as d
+on d.DepartmentID = c.DepartmentID
+where d.Name = 'Mathematics'
+)
+select * from fCourseMathematics()
+----Display Course details running by Instructor Harui Roger
+ALTER FUNCTION fCourseHaruiRoger()
+RETURNS TABLE
+AS
+RETURN
+(
+select p.FirstName,p.LastName,c.* from Person as p
+join CourseInstructor as ci
+on p.PersonID = ci.PersonID
+join Course as c
+on ci.CourseID = c.CourseID
+where p.FirstName = 'Roger' and p.LastName = 'Harui'
+)
+select * from fCourseHaruiRoger()
+----Display Full details of Student name / Course name / Instructor name/ Grade 
+ALTER FUNCTION fGrade()
+RETURNS TABLE
+AS
+RETURN
+(
+select p.FirstName as StudentFirstName,p.LastName as StudentLastName,c.Title,sg.Grade,pp.FirstName as InstructorFirstName,pp.LastName as InstructorLastName
+from Person as p
+join StudentGrade as sg
+on p.PersonID = sg.StudentID
+join course as c
+on sg.CourseID = c.CourseID 
+join CourseInstructor as ci
+on c.CourseID = ci.CourseID
+join Person as pp
+on pp.PersonID = ci.PersonID
+)
+select * from fGrade()
+--Create stored procedure accept Department as parameter and display all students studying in that department
+ALTER PROCEDURE spStudentDepartment
+@departmentName nvarchar(20)
+AS
+BEGIN
+select p.* from Person as p
+join StudentGrade as sg
+on p.PersonID = sg.StudentID
+join Course as c
+on c.CourseID = sg.CourseID
+join Department as d
+on d.DepartmentID = c.DepartmentID
+where d.Name = @departmentName
+END
+spStudentDepartment Mathematics
+--Create stored procedure accept Instructor as parameter and display all Courses that instructor teaching and Course type (ONLINE / ONSITE)
+alter procedure spInstructorCourse
+@instructorFirstName nvarchar(20),
+@instructorLastName nvarchar(20)
+AS
+BEGIN
+select c.*,dbo.fn_CourseType(c.CourseID) as CourseType from Person as p
+join CourseInstructor as ci
+on p.PersonID = ci.PersonID
+join Course as c
+on c.CourseID = ci.CourseID
+where p.FirstName = @instructorFirstName and p.LastName = @instructorLastName
+END
+
+alter function fn_CourseType(@courseID int)
+returns nvarchar(20)
+AS
+BEGIN
+if exists (select * from Course as c
+join OnsiteCourse as osc
+on c.CourseID = osc.CourseID
+where osc.CourseID = @courseID)
+and exists (select * from Course as c 
+join OnlineCourse as olc
+on c.CourseID = olc.CourseID
+where olc.CourseID = @courseID)
+return 'OnSite & Online' 
+else if exists (select * from Course as c
+join OnsiteCourse as osc
+on c.CourseID = osc.CourseID
+where osc.CourseID = @courseID)
+return 'OnSite'
+else if exists (select * from Course as c
+join OnlineCourse as olc
+on c.CourseID = olc.CourseID
+where olc.CourseID = @courseID)
+return 'Online'
+return null
+END
+spInstructorCourse Roger,Harui
+
+
+alter procedure spAverageGrade
+@courseName nvarchar(20) = NULL
+as
+begin
+if @courseName is null
+begin
+select a.CourseID, c.Credits, c.DepartmentID, c.Title, a.AverageGrade from (select CourseID,AVG(Grade) as AverageGrade
+from StudentGrade
+group by CourseID) as a join Course as c
+on c.CourseID = a.CourseID
+end
+else
+begin
+select c.*,(select avg(sg.Grade) from Course as c
+join StudentGrade as sg
+on sg.CourseID = c.CourseID
+where c.Title = @courseName) as AverageGrade from Course as c where c.Title = @courseName
+end
+end
+
+spAverageGrade
+
+ALTER procedure InstructorAverageGrade
+@instructorFirstName nvarchar(20),@instructorLastName nvarchar(20)
+as
+begin
+select p.*, c.CourseID,c.Credits,c.DepartmentID,c.Title,a.AverageGrade from (select sg.CourseID,AVG(Grade) as AverageGrade from StudentGrade as sg
+group by CourseID) as a join Course as c on a.CourseID = c.CourseID join CourseInstructor as ci 
+on ci.CourseID = c.CourseID join Person as p on p.PersonID = ci.PersonID 
+where p.FirstName = @instructorFirstName and p.LastName = @instructorLastName
+end
+
+InstructorAverageGrade Roger,Harui
